@@ -1,8 +1,10 @@
 use std::path::PathBuf;
-use actix_web::{HttpServer, web, HttpResponse, App, HttpRequest};
+
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer, web};
 use actix_web::http::Method;
-use crate::storage::{DockerImage, BlobReference};
-use crate::structures::{DockerErrorResponse, DockerErrorMessageType};
+
+use crate::structures::{DockerErrorMessageType, DockerErrorResponse};
+use crate::storage::{BlobReference, DockerImage};
 
 #[derive(Clone)]
 pub struct ServerConfig {
@@ -29,24 +31,36 @@ fn base() -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-async fn get_manifest(image: &DockerImage, image_ref: &str) -> std::io::Result<HttpResponse> {
-    let manifest_path = image.manifest_link_path(image_ref);
-
-    if !manifest_path.exists() {
-        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-            DockerErrorMessageType::MANIFEST_UNKNOWN,
-            "manifest unknown",
-        )));
+async fn get_manifest(image: &DockerImage, image_ref: &str, send: bool) -> std::io::Result<HttpResponse> {
+    // Requested hash is included in the request
+    let blob_ref = if image_ref.starts_with("sha256") {
+        BlobReference::from_str(image_ref)?
     }
 
-    let blob_ref = BlobReference::from_file(&manifest_path)?;
+    // We must find ourselves the blob to load
+    else {
+        let manifest_path = image.manifest_link_path(image_ref);
+
+        if !manifest_path.exists() {
+            return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+                DockerErrorMessageType::MANIFEST_UNKNOWN,
+                "manifest unknown",
+            )));
+        }
+
+        BlobReference::from_file(&manifest_path)?
+    };
+
     let manifest_path = blob_ref.data_path(&image.storage_path, &blob_ref);
 
     Ok(HttpResponse::Ok()
         .content_type("application/vnd.docker.distribution.manifest.v2+json")
         .header("Docker-Content-Digest", blob_ref.to_digest())
         .header("Etag", blob_ref.to_digest())
-        .body(std::fs::read_to_string(manifest_path)?))
+        .body(match send {
+            true => std::fs::read_to_string(manifest_path)?,
+            false => "".to_string()
+        }))
 }
 
 async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) -> HttpResponse {
@@ -66,7 +80,10 @@ async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) ->
         // Get manifest
         match r.method() {
             &Method::GET => {
-                return ok_or_internal_error(get_manifest(&image, image_ref).await);
+                return ok_or_internal_error(get_manifest(&image, image_ref, true).await);
+            }
+            &Method::HEAD => {
+                return ok_or_internal_error(get_manifest(&image, image_ref, false).await);
             }
             &_ => {}
         }

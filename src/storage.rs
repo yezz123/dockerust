@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 
 const BASE_PATH: &str = "docker/registry/v2/";
 
@@ -9,8 +9,7 @@ pub struct BlobReference {
 }
 
 impl BlobReference {
-    pub fn from_file(path: &Path) -> std::io::Result<Self> {
-        let content = std::fs::read_to_string(path)?;
+    pub fn from_str(content: &str) -> std::io::Result<Self> {
         let split = content.splitn(2, ":").collect::<Vec<_>>();
 
         if split.len() != 2 {
@@ -25,6 +24,10 @@ impl BlobReference {
             alg: split[0].to_string(),
             hash: split[1].to_string(),
         })
+    }
+
+    pub fn from_file(path: &Path) -> std::io::Result<Self> {
+        Self::from_str(&std::fs::read_to_string(path)?)
     }
 
     pub fn to_digest(&self) -> String {
