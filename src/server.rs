@@ -63,6 +63,23 @@ async fn get_manifest(image: &DockerImage, image_ref: &str, send: bool) -> std::
         }))
 }
 
+async fn get_digest(image: &DockerImage, digest: &str, send: bool) -> std::io::Result<HttpResponse> {
+    // Requested hash is included in the request
+    let blob_ref = BlobReference::from_str(digest)?;
+
+    let manifest_path = blob_ref.data_path(&image.storage_path, &blob_ref);
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/octet-stream")
+        .header("Docker-Content-Digest", blob_ref.to_digest())
+        .header("Etag", blob_ref.to_digest())
+        .body(match send {
+            true => std::fs::read(manifest_path)?,
+            false => vec![]
+        }))
+}
+
+
 async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) -> HttpResponse {
     let parts = r.uri().path().split("/").skip(2).collect::<Vec<_>>();
     if parts.len() < 3 {
@@ -84,6 +101,26 @@ async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) ->
             }
             &Method::HEAD => {
                 return ok_or_internal_error(get_manifest(&image, image_ref, false).await);
+            }
+            &_ => {}
+        }
+    }
+
+        // Blobs manipulation `/v2/<name>/blobs/<digest>`
+    if parts[parts.len() - 2].eq("blobs") {
+        let image = DockerImage::new(
+            &config.storage_path,
+            &parts[..parts.len() - 2].join("/"),
+        );
+        let digest = parts.last().unwrap();
+
+        // Get manifest
+        match r.method() {
+            &Method::GET => {
+                return ok_or_internal_error(get_digest(&image, digest, true).await);
+            }
+            &Method::HEAD => {
+                return ok_or_internal_error(get_digest(&image, digest, false).await);
             }
             &_ => {}
         }
