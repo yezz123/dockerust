@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use actix_web::{App, HttpRequest, HttpResponse, HttpServer, web};
 use actix_web::http::Method;
 
-use crate::structures::{DockerErrorMessageType, DockerErrorResponse};
+use crate::structures::{DockerErrorMessageType, DockerErrorResponse, DockerTagsList};
 use crate::storage::{BlobReference, DockerImage};
 
 #[derive(Clone)]
@@ -29,6 +29,26 @@ fn not_found() -> HttpResponse {
 
 fn base() -> HttpResponse {
     HttpResponse::Ok().finish()
+}
+
+fn get_tags_list(image: &DockerImage) -> std::io::Result<HttpResponse> {
+    if !image.image_path().exists() {
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::NAME_UNKNOWN,
+            "repository name not known to registry",
+        )));
+    }
+
+    let mut tags = vec![];
+    for dir in std::fs::read_dir(image.tags_path())? {
+        let dir = dir?;
+        tags.push(dir.file_name().to_string_lossy().to_string());
+    }
+
+    Ok(HttpResponse::Ok().json(DockerTagsList {
+        name: image.image.to_string(),
+        tags,
+    }))
 }
 
 async fn get_manifest(image: &DockerImage, image_ref: &str, send: bool) -> std::io::Result<HttpResponse> {
@@ -85,6 +105,17 @@ async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) ->
     if parts.len() < 3 {
         return not_found();
     }
+
+    // Get tags list `/v2/<name>/tags/list`
+    if r.uri().path().ends_with("/tags/list") {
+        let image = DockerImage::new(
+            &config.storage_path,
+            &parts[..parts.len() - 2].join("/"),
+        );
+
+        return ok_or_internal_error(get_tags_list(&image));
+    }
+
 
     // Manifest manipulation `/v2/<name>/manifests/<reference>`
     if parts[parts.len() - 2].eq("manifests") {

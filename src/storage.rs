@@ -47,7 +47,7 @@ impl BlobReference {
 
 pub struct DockerImage {
     pub storage_path: PathBuf,
-    image: String,
+    pub image: String,
 }
 
 impl DockerImage {
@@ -65,10 +65,15 @@ impl DockerImage {
             .join(&self.image)
     }
 
-    pub fn manifest_link_path(&self, manifest_ref: &str) -> PathBuf {
+    pub fn tags_path(&self) -> PathBuf {
         self.image_path()
             .join("_manifests/tags")
+    }
+
+    pub fn manifest_link_path(&self, manifest_ref: &str) -> PathBuf {
+        self.tags_path()
             .join(manifest_ref)
             .join("current/link")
     }
+
 }

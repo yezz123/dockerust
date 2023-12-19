@@ -45,3 +45,9 @@ impl DockerErrorResponse {
         }
     }
 }
+
+#[derive(serde::Serialize)]
+pub struct DockerTagsList {
+    pub name: String,
+    pub tags: Vec<String>,
+}
