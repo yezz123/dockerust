@@ -5,6 +5,7 @@ use actix_web::http::Method;
 
 use crate::structures::{DockerErrorMessageType, DockerErrorResponse, DockerTagsList};
 use crate::storage::{BlobReference, DockerImage};
+use crate::read_file_stream::ReadFileStream;
 
 #[derive(Clone)]
 pub struct ServerConfig {
@@ -87,16 +88,18 @@ async fn get_digest(image: &DockerImage, digest: &str, send: bool) -> std::io::R
     // Requested hash is included in the request
     let blob_ref = BlobReference::from_str(digest)?;
 
-    let manifest_path = blob_ref.data_path(&image.storage_path, &blob_ref);
+    let blob_path = blob_ref.data_path(&image.storage_path, &blob_ref);
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/octet-stream")
+    let mut response = HttpResponse::Ok();
+    response.content_type("application/octet-stream")
         .header("Docker-Content-Digest", blob_ref.to_digest())
-        .header("Etag", blob_ref.to_digest())
-        .body(match send {
-            true => std::fs::read(manifest_path)?,
-            false => vec![]
-        }))
+        .header("Etag", blob_ref.to_digest());
+
+    if !send {
+        return Ok(response.finish());
+    }
+
+    Ok(response.streaming(ReadFileStream::new(&blob_path)?))
 }
 
 
