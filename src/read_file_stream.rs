@@ -10,7 +10,7 @@ const CHUNK_SIZE: u64 = 1024 * 1024 * 50; // 50 MB
 
 pub struct ReadFileStream {
     file_size: u64,
-    processed: u64,
+    processed: usize,
     file: std::fs::File,
     error: bool,
 }
@@ -55,10 +55,12 @@ impl Stream for ReadFileStream {
             return Poll::Ready(None);
         }
 
+        self.processed += size ;
+
         Poll::Ready(Some(Ok(Bytes::from(chunk))))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        ((self.file_size - self.processed) as usize, None)
+        (self.file_size as usize - self.processed, None)
     }
 }
