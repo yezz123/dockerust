@@ -75,5 +75,40 @@ impl DockerImage {
             .join(manifest_ref)
             .join("current/link")
     }
+}
 
+pub fn recurse_images_scan(path: &Path, start: &Path) -> std::io::Result<Vec<String>> {
+    if !path.is_dir() {
+        return Ok(vec![]);
+    }
+
+    let mut list = vec![];
+
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        if entry.file_name().eq("_manifests") {
+            let image_path = path.to_string_lossy().to_string();
+            let start_path = start.to_string_lossy().to_string();
+
+            return Ok(vec![
+                image_path[start_path.len() + 1..].to_string()
+            ]);
+        } else {
+            list.append(&mut recurse_images_scan(&entry.path(), start)?);
+        }
+    }
+
+    Ok(list)
+}
+
+/// Get the entire list of docker image available
+pub fn get_docker_images_list(storage: &Path) -> std::io::Result<Vec<String>> {
+    let start = storage.join(BASE_PATH).join("repositories");
+    let mut list = recurse_images_scan(&start, &start)?;
+    list.sort();
+    Ok(list)
 }

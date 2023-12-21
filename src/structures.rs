@@ -51,3 +51,8 @@ pub struct DockerTagsList {
     pub name: String,
     pub tags: Vec<String>,
 }
+
+#[derive(serde::Serialize)]
+pub struct DockerCatalog {
+    pub repositories: Vec<String>,
+}

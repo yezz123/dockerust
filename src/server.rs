@@ -1,12 +1,3 @@
-use std::path::PathBuf;
-
-use actix_web::{App, HttpRequest, HttpResponse, HttpServer, web};
-use actix_web::http::Method;
-
-use crate::structures::{DockerErrorMessageType, DockerErrorResponse, DockerTagsList};
-use crate::storage::{BlobReference, DockerImage};
-use crate::read_file_stream::ReadFileStream;
-
 #[derive(Clone)]
 pub struct ServerConfig {
     pub storage_path: PathBuf,
@@ -30,6 +21,39 @@ fn not_found() -> HttpResponse {
 
 fn base() -> HttpResponse {
     HttpResponse::Ok().finish()
+}
+
+#[derive(serde::Deserialize)]
+struct CatalogRequest {
+    n: Option<usize>,
+    last: Option<String>,
+}
+
+fn catalog(req: web::Query<CatalogRequest>, conf: web::Data<ServerConfig>) -> HttpResponse {
+    let images = match get_docker_images_list(&conf.storage_path) {
+        Ok(images) => images,
+        Err(e) => {
+            eprintln!("Failed to get the list of images! {:?}", e);
+            return HttpResponse::InternalServerError().json("500 Internal Error");
+        }
+    };
+
+    if images.is_empty() {
+        return HttpResponse::Ok().json(DockerCatalog {
+            repositories: vec![],
+        });
+    }
+
+    let start = match &req.last {
+        None => 0,
+        Some(s) => images.iter().position(|f| f.eq(s))
+            .map(|f| f + 1).unwrap_or(0)
+    };
+    let end = start + req.n.unwrap_or(images.len() + 1);
+
+    HttpResponse::Ok().json(DockerCatalog {
+        repositories: images[min(start, images.len() - 1)..min(images.len(), end)].to_vec(),
+    })
 }
 
 fn get_tags_list(image: &DockerImage) -> std::io::Result<HttpResponse> {
@@ -102,7 +126,6 @@ async fn get_digest(image: &DockerImage, digest: &str, send: bool) -> std::io::R
     Ok(response.streaming(ReadFileStream::new(&blob_path)?))
 }
 
-
 async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) -> HttpResponse {
     let parts = r.uri().path().split("/").skip(2).collect::<Vec<_>>();
     if parts.len() < 3 {
@@ -118,7 +141,6 @@ async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) ->
 
         return ok_or_internal_error(get_tags_list(&image));
     }
-
 
     // Manifest manipulation `/v2/<name>/manifests/<reference>`
     if parts[parts.len() - 2].eq("manifests") {
@@ -140,7 +162,7 @@ async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) ->
         }
     }
 
-        // Blobs manipulation `/v2/<name>/blobs/<digest>`
+    // Blobs manipulation `/v2/<name>/blobs/<digest>`
     if parts[parts.len() - 2].eq("blobs") {
         let image = DockerImage::new(
             &config.storage_path,
@@ -169,6 +191,7 @@ pub async fn start(config: ServerConfig) -> std::io::Result<()> {
         App::new()
             .data(config.clone())
             .route("/v2/", web::get().to(base))
+            .route("/v2/_catalog", web::get().to(catalog))
             .route("/v2/**", web::to(requests_dispatcher))
             .route("**", web::to(not_found))
     })
