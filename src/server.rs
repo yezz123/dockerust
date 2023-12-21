@@ -1,3 +1,12 @@
+use std::path::PathBuf;
+
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer, web};
+use actix_web::http::Method;
+
+use crate::structures::{DockerErrorMessageType, DockerErrorResponse, DockerTagsList};
+use crate::storage::{BlobReference, DockerImage};
+use crate::read_file_stream::ReadFileStream;
+
 #[derive(Clone)]
 pub struct ServerConfig {
     pub storage_path: PathBuf,
@@ -76,6 +85,29 @@ fn get_tags_list(image: &DockerImage) -> std::io::Result<HttpResponse> {
     }))
 }
 
+async fn serve_blob(blob_ref: &BlobReference, image: &DockerImage,
+                    send: bool, content_type: &str) -> std::io::Result<HttpResponse> {
+    let blob_path = blob_ref.data_path(&image.storage_path, &blob_ref);
+
+    if !blob_path.exists() {
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::BLOB_UNKNOWN,
+            "blob not found",
+        )));
+    }
+
+    let mut response = HttpResponse::Ok();
+    response.content_type(content_type)
+        .header("Docker-Content-Digest", blob_ref.to_digest())
+        .header("Etag", blob_ref.to_digest());
+
+    if !send {
+        return Ok(response.finish());
+    }
+
+    Ok(response.streaming(ReadFileStream::new(&blob_path)?))
+}
+
 async fn get_manifest(image: &DockerImage, image_ref: &str, send: bool) -> std::io::Result<HttpResponse> {
     // Requested hash is included in the request
     let blob_ref = if image_ref.starts_with("sha256") {
@@ -96,34 +128,22 @@ async fn get_manifest(image: &DockerImage, image_ref: &str, send: bool) -> std::
         BlobReference::from_file(&manifest_path)?
     };
 
-    let manifest_path = blob_ref.data_path(&image.storage_path, &blob_ref);
-
-    Ok(HttpResponse::Ok()
-        .content_type("application/vnd.docker.distribution.manifest.v2+json")
-        .header("Docker-Content-Digest", blob_ref.to_digest())
-        .header("Etag", blob_ref.to_digest())
-        .body(match send {
-            true => std::fs::read_to_string(manifest_path)?,
-            false => "".to_string()
-        }))
+    serve_blob(
+        &blob_ref,
+        &image,
+        send,
+        "application/vnd.docker.distribution.manifest.v2+json",
+    ).await
 }
 
-async fn get_digest(image: &DockerImage, digest: &str, send: bool) -> std::io::Result<HttpResponse> {
+async fn get_blob(image: &DockerImage, digest: &str, send: bool) -> std::io::Result<HttpResponse> {
     // Requested hash is included in the request
-    let blob_ref = BlobReference::from_str(digest)?;
-
-    let blob_path = blob_ref.data_path(&image.storage_path, &blob_ref);
-
-    let mut response = HttpResponse::Ok();
-    response.content_type("application/octet-stream")
-        .header("Docker-Content-Digest", blob_ref.to_digest())
-        .header("Etag", blob_ref.to_digest());
-
-    if !send {
-        return Ok(response.finish());
-    }
-
-    Ok(response.streaming(ReadFileStream::new(&blob_path)?))
+    serve_blob(
+        &BlobReference::from_str(digest)?,
+        &image,
+        send,
+        "application/octet-stream",
+    ).await
 }
 
 async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) -> HttpResponse {
@@ -173,10 +193,10 @@ async fn requests_dispatcher(r: HttpRequest, config: web::Data<ServerConfig>) ->
         // Get manifest
         match r.method() {
             &Method::GET => {
-                return ok_or_internal_error(get_digest(&image, digest, true).await);
+                return ok_or_internal_error(get_blob(&image, digest, true).await);
             }
             &Method::HEAD => {
-                return ok_or_internal_error(get_digest(&image, digest, false).await);
+                return ok_or_internal_error(get_blob(&image, digest, false).await);
             }
             &_ => {}
         }
