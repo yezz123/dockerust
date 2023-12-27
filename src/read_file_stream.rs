@@ -1,4 +1,4 @@
-use std::io::{ErrorKind, Read};
+use std::io::Read;
 use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -27,7 +27,7 @@ impl ReadFileStream {
 }
 
 impl Stream for ReadFileStream {
-    type Item = std::io::Result<Bytes>;
+    type Item = actix_web::Result<Bytes>;
 
     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if self.error {
@@ -35,27 +35,22 @@ impl Stream for ReadFileStream {
         }
 
         let mut chunk = Vec::with_capacity(CHUNK_SIZE as usize);
-        let size = self.file.by_ref()
-            .take(CHUNK_SIZE)
-            .read_to_end(&mut chunk);
+        let size = self.file.by_ref().take(CHUNK_SIZE).read_to_end(&mut chunk);
 
         let size = match size {
             Err(e) => {
                 eprintln!("Failed to read from file! {}", e);
                 self.error = true;
-                return Poll::Ready(Some(Err(std::io::Error::new(
-                    ErrorKind::Other,
-                    "Failed to read data!".to_string(),
-                ))));
+                return Poll::Ready(Some(Err(actix_web::Error::from(e))));
             }
-            Ok(size) => size
+            Ok(size) => size,
         };
 
         if size == 0 {
             return Poll::Ready(None);
         }
 
-        self.processed += size ;
+        self.processed += size;
 
         Poll::Ready(Some(Ok(Bytes::from(chunk))))
     }
