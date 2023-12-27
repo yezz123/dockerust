@@ -4,17 +4,14 @@ use std::process;
 
 use bcrypt::DEFAULT_COST;
 
-use dockerust::storage::clean_storage;
 use dockerust::server;
 use dockerust::server::{Credentials, ServerConfig};
+use dockerust::storage::clean_storage;
 use dockerust::utils::{rand_str, request_input};
 
 fn show_usage() {
     let args = std::env::args().collect::<Vec<_>>();
-    eprintln!(
-        "Usage: {} {{init-config|serve|add_user}} [conf_file]",
-        args[0]
-    );
+    eprintln!("Usage: {} {{init-config|serve|add_user}} [conf_file]", args[0]);
     process::exit(-1);
 }
 
@@ -34,8 +31,7 @@ fn init_config(conf_path: &Path) -> std::io::Result<()> {
 
     std::fs::write(
         conf_path,
-        serde_yaml::to_string(&conf)
-            .map_err(|_| Error::new(ErrorKind::Other, "failed to deserialize"))?,
+        serde_yaml::to_string(&conf).map_err(|_| Error::new(ErrorKind::Other, "failed to deserialize"))?,
     )?;
 
     Ok(())
@@ -58,8 +54,7 @@ fn add_user(conf_path: &Path) -> std::io::Result<()> {
 
     std::fs::write(
         conf_path,
-        serde_yaml::to_string(&conf)
-            .map_err(|_| Error::new(ErrorKind::Other, "failed to serialize config"))?,
+        serde_yaml::to_string(&conf).map_err(|_| Error::new(ErrorKind::Other, "failed to serialize config"))?,
     )?;
 
     println!("User added.");

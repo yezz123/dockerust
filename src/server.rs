@@ -15,13 +15,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::api::{
-    DockerCatalog, DockerErrorMessageType, DockerErrorResponse, DockerTagsList,
-};
+use crate::api::{DockerCatalog, DockerErrorMessageType, DockerErrorResponse, DockerTagsList};
 use crate::constants::AUTH_TOKENS_DURATION;
-use crate::storage::{clean_storage, get_docker_images_list, BlobReference, DockerImage};
 use crate::docker::DockerManifestOrManifestList;
 use crate::read_file_stream::ReadFileStream;
+use crate::storage::{clean_storage, get_docker_images_list, BlobReference, DockerImage};
 use crate::utils::{create_empty_file, sha256sum, sha256sum_str, time};
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -83,9 +81,7 @@ impl ServerConfig {
 
     pub fn check_auth(&self, user: &str, password: &str) -> bool {
         for cred in &self.credentials {
-            if cred.user_name.eq(user)
-                && bcrypt::verify(password, &cred.password_hash).unwrap_or(false)
-            {
+            if cred.user_name.eq(user) && bcrypt::verify(password, &cred.password_hash).unwrap_or(false) {
                 return true;
             }
         }
@@ -109,11 +105,7 @@ where
 
 fn request_auth(conf: &ServerConfig, error: Option<&'static str>) -> HttpResponse {
     let realm = format!("{}/token", conf.access_url);
-    let service = conf
-        .access_url
-        .split("://")
-        .last()
-        .unwrap_or("dockerust");
+    let service = conf.access_url.split("://").last().unwrap_or("dockerust");
 
     let complement = match error {
         None => "".to_string(),
@@ -134,11 +126,7 @@ fn request_auth(conf: &ServerConfig, error: Option<&'static str>) -> HttpRespons
         ))
 }
 
-fn check_auth(
-    req: &HttpRequest,
-    conf: &ServerConfig,
-    user: &mut Option<String>,
-) -> Option<HttpResponse> {
+fn check_auth(req: &HttpRequest, conf: &ServerConfig, user: &mut Option<String>) -> Option<HttpResponse> {
     if !conf.need_auth() {
         *user = Some("anonymous".to_string());
         return None;
@@ -264,18 +252,12 @@ async fn catalog(req: web::Query<CatalogRequest>, conf: web::Data<ServerConfig>)
     };
 
     if images.is_empty() {
-        return HttpResponse::Ok().json(DockerCatalog {
-            repositories: vec![],
-        });
+        return HttpResponse::Ok().json(DockerCatalog { repositories: vec![] });
     }
 
     let start = match &req.last {
         None => 0,
-        Some(s) => images
-            .iter()
-            .position(|f| f.eq(s))
-            .map(|f| f + 1)
-            .unwrap_or(0),
+        Some(s) => images.iter().position(|f| f.eq(s)).map(|f| f + 1).unwrap_or(0),
     };
     let end = start + req.n.unwrap_or(images.len() + 1);
 
@@ -286,12 +268,10 @@ async fn catalog(req: web::Query<CatalogRequest>, conf: web::Data<ServerConfig>)
 
 fn get_tags_list(image: &DockerImage) -> std::io::Result<HttpResponse> {
     if !image.image_path().exists() {
-        return Ok(
-            HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-                DockerErrorMessageType::NAME_UNKNOWN,
-                "repository name not known to registry",
-            )),
-        );
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::NAME_UNKNOWN,
+            "repository name not known to registry",
+        )));
     }
 
     let tags = image.tags_list()?;
@@ -310,12 +290,10 @@ async fn serve_blob(
     let blob_path = blob_ref.data_path(&image.storage_path);
 
     if !blob_path.exists() {
-        return Ok(
-            HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-                DockerErrorMessageType::BLOB_UNKNOWN,
-                "blob not found",
-            )),
-        );
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::BLOB_UNKNOWN,
+            "blob not found",
+        )));
     }
 
     let blob_len = blob_path.metadata()?.len();
@@ -339,30 +317,25 @@ async fn get_manifest(image: &DockerImage, image_ref: &str) -> std::io::Result<H
         let manifest_path = image.manifest_tag_link_path(image_ref);
 
         if !manifest_path.exists() {
-            return Ok(
-                HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-                    DockerErrorMessageType::MANIFEST_UNKNOWN,
-                    "manifest unknown",
-                )),
-            );
+            return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+                DockerErrorMessageType::MANIFEST_UNKNOWN,
+                "manifest unknown",
+            )));
         }
 
         BlobReference::from_file(&manifest_path)?
     };
 
     if !image.manifests_revision_list()?.contains(&blob_ref) {
-        return Ok(
-            HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-                DockerErrorMessageType::MANIFEST_BLOB_UNKNOWN,
-                "manifest blob not attached to manifest",
-            )),
-        );
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::MANIFEST_BLOB_UNKNOWN,
+            "manifest blob not attached to manifest",
+        )));
     }
 
     // Load manifest to get its type
-    let manifest: DockerManifestOrManifestList = serde_json::from_str(&std::fs::read_to_string(
-        blob_ref.data_path(&image.storage_path),
-    )?)?;
+    let manifest: DockerManifestOrManifestList =
+        serde_json::from_str(&std::fs::read_to_string(blob_ref.data_path(&image.storage_path))?)?;
 
     serve_blob(&blob_ref, image, &manifest.mediaType).await
 }
@@ -376,17 +349,13 @@ async fn put_manifest(
     // Get manifest data
     let mut bytes = web::BytesMut::new();
     while let Some(item) = payload.next().await {
-        bytes.extend_from_slice(&item.map_err(|_| {
-            std::io::Error::new(ErrorKind::Other, "Failed to read a chunk of data")
-        })?);
+        bytes.extend_from_slice(
+            &item.map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to read a chunk of data"))?,
+        );
     }
 
-    let manifest = String::from_utf8(bytes.as_ref().to_vec()).map_err(|_| {
-        std::io::Error::new(
-            ErrorKind::Other,
-            "Failed to turn the manifest into a string",
-        )
-    })?;
+    let manifest = String::from_utf8(bytes.as_ref().to_vec())
+        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to turn the manifest into a string"))?;
 
     let blob_ref = BlobReference::from_sha256sum(sha256sum_str(&manifest)?);
 
@@ -421,20 +390,14 @@ async fn put_manifest(
         .finish())
 }
 
-async fn delete_manifest(
-    image: &DockerImage,
-    digest: &str,
-    conf: &ServerConfig,
-) -> std::io::Result<HttpResponse> {
+async fn delete_manifest(image: &DockerImage, digest: &str, conf: &ServerConfig) -> std::io::Result<HttpResponse> {
     let blob = BlobReference::from_str(digest)?;
 
     if !image.manifests_revision_list()?.contains(&blob) {
-        return Ok(
-            HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-                DockerErrorMessageType::MANIFEST_BLOB_UNKNOWN,
-                "manifest blob not attached to manifest",
-            )),
-        );
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::MANIFEST_BLOB_UNKNOWN,
+            "manifest blob not attached to manifest",
+        )));
     }
 
     // Remove tags
@@ -453,21 +416,14 @@ async fn delete_manifest(
 
 async fn get_blob(image: &DockerImage, digest: &str) -> std::io::Result<HttpResponse> {
     // Requested hash is included in the request
-    serve_blob(
-        &BlobReference::from_str(digest)?,
-        image,
-        "application/octet-stream",
-    )
-    .await
+    serve_blob(&BlobReference::from_str(digest)?, image, "application/octet-stream").await
 }
 
 async fn delete_blob(_image: &DockerImage, _digest: &str) -> std::io::Result<HttpResponse> {
-    Ok(
-        HttpResponse::MethodNotAllowed().json(DockerErrorResponse::new_simple(
-            DockerErrorMessageType::UNSUPPORTED,
-            "blobs are automatically garbage collected",
-        )),
-    )
+    Ok(HttpResponse::MethodNotAllowed().json(DockerErrorResponse::new_simple(
+        DockerErrorMessageType::UNSUPPORTED,
+        "blobs are automatically garbage collected",
+    )))
 }
 
 fn blob_upload_response(
@@ -476,10 +432,7 @@ fn blob_upload_response(
     uuid: &str,
     config: &ServerConfig,
 ) -> std::io::Result<HttpResponse> {
-    let location = format!(
-        "{}/v2/{}/blobs/uploads/{}",
-        config.access_url, &image.image, uuid
-    );
+    let location = format!("{}/v2/{}/blobs/uploads/{}", config.access_url, &image.image, uuid);
 
     let offset = match std::fs::metadata(image.upload_storage_path(uuid))?.len() {
         0 => 0,
@@ -493,10 +446,7 @@ fn blob_upload_response(
         .finish())
 }
 
-async fn start_blob_upload(
-    image: &DockerImage,
-    config: &ServerConfig,
-) -> std::io::Result<HttpResponse> {
+async fn start_blob_upload(image: &DockerImage, config: &ServerConfig) -> std::io::Result<HttpResponse> {
     let uuid = Uuid::new_v4().to_string();
     let path = image.upload_storage_path(&uuid);
 
@@ -505,18 +455,12 @@ async fn start_blob_upload(
     blob_upload_response(HttpResponse::Accepted(), image, &uuid, config)
 }
 
-fn blob_upload_status(
-    image: &DockerImage,
-    uuid: &str,
-    config: &ServerConfig,
-) -> std::io::Result<HttpResponse> {
+fn blob_upload_status(image: &DockerImage, uuid: &str, config: &ServerConfig) -> std::io::Result<HttpResponse> {
     if !image.upload_storage_path(uuid).exists() {
-        return Ok(
-            HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-                DockerErrorMessageType::BLOB_UNKNOWN,
-                "blob unknown",
-            )),
-        );
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::BLOB_UNKNOWN,
+            "blob unknown",
+        )));
     }
 
     blob_upload_response(HttpResponse::NoContent(), image, uuid, config)
@@ -530,15 +474,14 @@ async fn process_blob_upload(
     let payload_path = image.upload_storage_path(uuid);
 
     if !payload_path.exists() {
-        return Ok(Some(HttpResponse::NotFound().json(
-            DockerErrorResponse::new_simple(DockerErrorMessageType::BLOB_UNKNOWN, "blob unknown"),
-        )));
+        return Ok(Some(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::BLOB_UNKNOWN,
+            "blob unknown",
+        ))));
     }
 
     // Open file
-    let mut file = OpenOptions::new()
-        .append(true)
-        .open(image.upload_storage_path(uuid))?;
+    let mut file = OpenOptions::new().append(true).open(image.upload_storage_path(uuid))?;
 
     while let Some(chunk) = payload.next().await {
         match chunk {
@@ -588,12 +531,10 @@ async fn blob_upload_finish(
     // Process chunk digest
     let computed_digest = format!("sha256:{}", sha256sum(&image.upload_storage_path(uuid))?);
     if !computed_digest.eq(digest) {
-        return Ok(
-            HttpResponse::BadRequest().json(DockerErrorResponse::new_simple(
-                DockerErrorMessageType::DIGEST_INVALID,
-                "invalid digest",
-            )),
-        );
+        return Ok(HttpResponse::BadRequest().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::DIGEST_INVALID,
+            "invalid digest",
+        )));
     }
 
     // Move blob to its destination
@@ -614,12 +555,10 @@ async fn blob_upload_finish(
 
 fn cancel_blob_upload(image: &DockerImage, uuid: &str) -> std::io::Result<HttpResponse> {
     if !image.upload_storage_path(uuid).exists() {
-        return Ok(
-            HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
-                DockerErrorMessageType::BLOB_UNKNOWN,
-                "blob unknown",
-            )),
-        );
+        return Ok(HttpResponse::NotFound().json(DockerErrorResponse::new_simple(
+            DockerErrorMessageType::BLOB_UNKNOWN,
+            "blob unknown",
+        )));
     }
 
     std::fs::remove_file(image.upload_storage_path(uuid))?;
@@ -670,9 +609,7 @@ async fn requests_dispatcher(
                     return insufficient_authorizations(&config);
                 }
 
-                return ok_or_internal_error(
-                    put_manifest(&image, image_ref, payload, &config).await,
-                );
+                return ok_or_internal_error(put_manifest(&image, image_ref, payload, &config).await);
             }
             Method::DELETE => {
                 if user.is_none() {
@@ -731,11 +668,7 @@ async fn requests_dispatcher(
 
         match *r.method() {
             Method::GET => return ok_or_internal_error(blob_upload_status(&image, uuid, &config)),
-            Method::PATCH => {
-                return ok_or_internal_error(
-                    blob_upload_patch(&image, uuid, &config, payload).await,
-                )
-            }
+            Method::PATCH => return ok_or_internal_error(blob_upload_patch(&image, uuid, &config, payload).await),
             Method::PUT => {
                 return ok_or_internal_error(
                     blob_upload_finish(
@@ -771,4 +704,3 @@ pub async fn start(config: ServerConfig) -> std::io::Result<()> {
     .run()
     .await
 }
-

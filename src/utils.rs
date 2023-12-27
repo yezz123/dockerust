@@ -21,10 +21,7 @@ pub fn sha256sum(path: &Path) -> std::io::Result<String> {
     let output = Command::new("sha256sum").arg(path.as_os_str()).output()?;
 
     if !output.status.success() {
-        return Err(std::io::Error::new(
-            ErrorKind::Other,
-            "Failed to compute sum!",
-        ));
+        return Err(std::io::Error::new(ErrorKind::Other, "Failed to compute sum!"));
     }
 
     let hash = String::from_utf8_lossy(&output.stdout)
@@ -87,9 +84,5 @@ pub fn rand_str(len: usize) -> String {
 /// let time = time();
 /// ```
 pub fn time() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }
-

@@ -54,4 +54,3 @@ pub struct DockerTagsList {
 pub struct DockerCatalog {
     pub repositories: Vec<String>,
 }
-
