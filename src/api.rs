@@ -35,13 +35,11 @@ pub struct DockerErrorResponse {
 impl DockerErrorResponse {
     pub fn new_simple(code: DockerErrorMessageType, msg: &str) -> Self {
         Self {
-            errors: vec![
-                DockerError {
-                    code,
-                    message: msg.to_string(),
-                    detail: HashMap::new(),
-                }
-            ]
+            errors: vec![DockerError {
+                code,
+                message: msg.to_string(),
+                detail: HashMap::new(),
+            }],
         }
     }
 }
@@ -56,3 +54,4 @@ pub struct DockerTagsList {
 pub struct DockerCatalog {
     pub repositories: Vec<String>,
 }
+
