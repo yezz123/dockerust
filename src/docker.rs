@@ -68,4 +68,3 @@ impl DockerManifestOrManifestList {
         None
     }
 }
-

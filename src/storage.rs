@@ -47,8 +47,7 @@ impl BlobReference {
     }
 
     pub fn is_empty_ref(&self) -> bool {
-        self.alg == "sha256"
-            && self.hash == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        self.alg == "sha256" && self.hash == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
 }
 
@@ -63,10 +62,7 @@ impl FromStr for BlobReference {
         }
 
         if split[1].len() <= 2 {
-            return Err(std::io::Error::new(
-                ErrorKind::Other,
-                "Blob hash is too small!",
-            ));
+            return Err(std::io::Error::new(ErrorKind::Other, "Blob hash is too small!"));
         }
 
         Ok(Self {
@@ -91,10 +87,7 @@ impl DockerImage {
     }
 
     pub fn image_path(&self) -> PathBuf {
-        self.storage_path
-            .join(BASE_PATH)
-            .join("repositories")
-            .join(&self.image)
+        self.storage_path.join(BASE_PATH).join("repositories").join(&self.image)
     }
 
     pub fn tags_path(&self) -> PathBuf {
@@ -125,10 +118,7 @@ impl DockerImage {
         Ok(list)
     }
 
-    pub fn get_tags_attached_to_manifest_blob(
-        &self,
-        b: &BlobReference,
-    ) -> std::io::Result<Vec<String>> {
+    pub fn get_tags_attached_to_manifest_blob(&self, b: &BlobReference) -> std::io::Result<Vec<String>> {
         let mut list = vec![];
 
         for tag in self.tags_list()? {
@@ -166,10 +156,7 @@ impl DockerImage {
     }
 
     pub fn manifest_revision_path(&self, blob: &BlobReference) -> PathBuf {
-        self.revisions_path()
-            .join(&blob.alg)
-            .join(&blob.hash)
-            .join("link")
+        self.revisions_path().join(&blob.alg).join(&blob.hash).join("link")
     }
 
     pub fn upload_storage_path(&self, uuid: &str) -> PathBuf {
@@ -243,10 +230,7 @@ pub fn get_blob_list(storage: &Path) -> std::io::Result<Vec<BlobReference>> {
     Ok(list)
 }
 
-fn is_blob_useless_in_docker_manifest(
-    blob_ref: &BlobReference,
-    manifest: &DockerManifest,
-) -> std::io::Result<bool> {
+fn is_blob_useless_in_docker_manifest(blob_ref: &BlobReference, manifest: &DockerManifest) -> std::io::Result<bool> {
     // Check config
     if &BlobReference::from_docker_blob_ref(&manifest.config)? == blob_ref {
         return Ok(false);
@@ -274,8 +258,7 @@ fn is_blob_useless_in_distribution_file(
         return Ok(true);
     }
 
-    let manifest: DockerManifestOrManifestList =
-        serde_json::from_str(&std::fs::read_to_string(manifest_path)?)?;
+    let manifest: DockerManifestOrManifestList = serde_json::from_str(&std::fs::read_to_string(manifest_path)?)?;
 
     // In case of manifest file
     if let Some(manifest) = manifest.get_manifest() {
