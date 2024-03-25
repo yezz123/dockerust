@@ -14,7 +14,7 @@ futures = "0.3.30"
 uuid = { version = "1.1.2", features = ["v4"] }
 mktemp = "0.5.1"
 base64 = "0.21.7"
-serde_yaml = "0.9.30"
+serde_yaml = "0.9.34"
 bcrypt = "0.15.0"
 jsonwebtoken = "9.2.0"
 rand = "0.8.5"
